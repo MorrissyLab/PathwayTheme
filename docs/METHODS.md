@@ -93,7 +93,7 @@ $$W\in\mathbb{R}^{K\times p},\qquad W_{ki}=\text{weight of pathway }i\text{ in P
 
 $$
 \lambda_k=\frac{s_k^2}{n-1},\qquad
-\text{var\_explained}_k=\frac{\lambda_k}{\sum_m\lambda_m}.
+\rho_k=\frac{\lambda_k}{\sum_m\lambda_m}\quad(\text{fraction of variance explained by PC }k).
 $$
 
 (The sign of a PC is arbitrary but reproducible for a fixed input.)

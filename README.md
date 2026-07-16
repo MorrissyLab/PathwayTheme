@@ -4,6 +4,8 @@ Turn **any omic data** into a pathway-level summary:
 
 **enrichment (ssGSEA / EnrichR / GoSlim) → grouping → PCA → figures + tables.**
 
+📄 **How the PCA step works (the math, step by step): [docs/METHODS.md](docs/METHODS.md).**
+
 ## What it does
 
 ```
@@ -27,6 +29,7 @@ Turn **any omic data** into a pathway-level summary:
    Optionally run **one PCA per sample** (or per any grouping).
 4. **PCA + figures** — see which pathways drive the variation, and which
    pathways define each group, as ready-to-use PDFs and tables.
+   → full calculation walkthrough in [docs/METHODS.md](docs/METHODS.md).
 
 ## Install
 
