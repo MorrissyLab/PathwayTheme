@@ -1,0 +1,46 @@
+# Reproduces the MOH_SM ssGSEA -> per-sample PCA workflow.
+#
+#   input:      single-cell .h5ad files  -> per-cluster pseudobulk
+#   enrichment: ssGSEA against a GO-BP .gmt  -> NES matrix (terms x sample|cluster)
+#   grouping:   one PCA per biological sample (scope=sample_id),
+#               observations coloured by their cluster id (target=cluster_id)
+#   pca + viz:  11 figures + 3 tables per sample
+#
+# To colour by a biological annotation instead (e.g. cell class), add that
+# column to the pseudobulk metadata and set grouping.target_col to it.
+
+input:
+  kind: h5ad
+  h5ad_dir: "Z:/University of Calgary/Morrissy Lab - Documents/MOH_MultiOmics/cellbender_r_objects"
+  cluster_col: seurat_clusters
+  sample_col: Sample_name
+  aggregate: mean
+
+enrichment:
+  backend: ssgsea
+  geneset: GO_BP
+  gmt_path: "C:/Users/alyos/Downloads/msigdb_2025.1_Hs_selected/c5.go.bp.v2025.1.Hs.symbols.gmt"
+  min_gene_set_size: 5
+  max_gene_set_size: 5000
+  threads: 8
+  weight: 0.25
+  cache_dir: "pathwaytheme_output/cache"
+
+grouping:
+  mode: target
+  target_col: cluster_id
+  scope_col: sample_id
+  size_col: n_cells
+
+pca:
+  k_max: 10
+  top_pcs_per_cluster: 3
+  top_pathways_per_cluster: 25
+  top_pathways_per_pc: 50
+
+viz:
+  make_figures: true
+  make_tables: true
+  dpi: 120
+
+output_dir: "pathwaytheme_output"

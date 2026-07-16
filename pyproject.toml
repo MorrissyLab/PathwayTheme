@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pathwaytheme"
+version = "0.1.0"
+description = "Modular omic-enrichment + PCA pathway-analysis pipeline (ssGSEA / EnrichR / GoSlim)"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Aly Abdelkareem" }]
+dependencies = [
+    "numpy",
+    "pandas",
+    "scipy",
+    "scikit-learn",
+    "matplotlib",
+    "seaborn",
+    "gseapy",
+    "openpyxl",
+    "pyyaml",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+h5ad = ["anndata"]
+goslim = ["goatools"]
+viz = ["adjustText", "distinctipy"]
+all = ["anndata", "goatools", "adjustText", "distinctipy"]
+dev = ["pytest"]
+
+[project.scripts]
+pathwaytheme = "pathwaytheme.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Environments
+.venv/
+venv/
+.uv/
+
+# Test / tooling
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Pipeline outputs
+pathwaytheme_output/
+notebook_output/
+*.pdf.tmp
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

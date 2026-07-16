@@ -1,0 +1,35 @@
+# Generic "any omic" workflow from a pre-quantified matrix.
+#
+#   input:      features x samples table (+ optional metadata table)
+#   enrichment: EnrichR-style over-representation (offline, against a .gmt)
+#   grouping:   auto-cluster samples in term space (silhouette picks k)
+#   pca + viz:  one PCA over all samples, coloured by the auto cluster
+
+input:
+  kind: matrix
+  matrix_path: "data/expression.tsv"     # rows = features (genes), cols = samples
+  metadata_path: "data/metadata.tsv"     # optional; index = sample id
+  sep: "\t"
+
+enrichment:
+  backend: enrichr
+  geneset: GOBP_ORA
+  gmt_path: "C:/Users/alyos/Downloads/msigdb_2025.1_Hs_selected/c5.go.bp.v2025.1.Hs.symbols.gmt"
+  gene_selection: top_n          # or "threshold" (+ threshold: <value>)
+  top_n: 200
+  enrichr_score: "-log10_padj"   # or "combined_score"
+
+grouping:
+  mode: auto
+  method: kmeans                 # or "hierarchical"
+  k_min: 2
+  k_max: 10
+
+pca:
+  k_max: 10
+
+viz:
+  make_figures: true
+  make_tables: true
+
+output_dir: "pathwaytheme_output"
