@@ -1,147 +1,129 @@
 # PathwayTheme
 
-Modular pipeline: **any omic data → enrichment (ssGSEA / EnrichR / GoSlim) →
-grouping (target column / existing labels / auto-clustering) → PCA pathway
-analysis → summary figures + tables.**
+Turn **any omic data** into a pathway-level summary:
 
-See [PLAN.md](PLAN.md) for the design rationale.
+**enrichment (ssGSEA / EnrichR / GoSlim) → grouping → PCA → figures + tables.**
 
-## Workflow
-
-Four stages, each connected by one plain-DataFrame contract, so any stage can
-be swapped without touching the others:
+## What it does
 
 ```
- raw omic / matrix          FeatureMatrix        ScoreMatrix          Grouping        PCAResult        figures
- ┌───────────────┐          (features×samples)   (terms×samples)      (sample→label)  (per scope)      + tables
- │ .h5ad         │  ┌─────┐ ───────────────────▶ ┌────────────┐ ────▶ ┌──────────┐ ──▶ ┌─────┐ ───────▶ 11 PDFs
- │ matrix (tsv…) │─▶│ io  │                       │ enrichment │       │ grouping │     │ PCA │           3 TSVs
- └───────────────┘  └─────┘                       └────────────┘       └──────────┘     └─────┘
-                     load      ssgsea/enrichr/goslim   target/existing/auto   z-score→PCA→signatures
+   your data            pathway scores        groups            PCA            figures + tables
+   ┌──────────┐         ┌────────────┐        ┌────────┐        ┌──────┐       ┌──────────────┐
+   │ .h5ad    │  enrich │ per-sample │  group │ compare│   PCA  │ trends│  viz  │ 11 plots     │
+   │ or matrix│ ───────▶│ pathway    │ ──────▶│  by ...│ ──────▶│ across│ ─────▶│  3 tables    │
+   └──────────┘         │ enrichment │        └────────┘        └──────┘       └──────────────┘
 ```
 
-1. **io** — load a single-cell `.h5ad` (→ per-cluster pseudobulk) or a
-   pre-quantified `features × samples` matrix.
-2. **enrichment** — score every sample against gene sets. All three backends
-   return the identical `terms × samples` matrix:
-   - `ssgsea` — continuous per-sample NES (gseapy).
-   - `enrichr` — over-representation of each sample's gene list (`-log10 padj`).
-   - `goslim` — coarse GO-slim category scores.
-3. **grouping** — decide what to compare/colour by:
-   - `target` — a metadata column (e.g. `classification`, `treatment`).
-   - `existing` — cluster labels already in the data.
-   - `auto` — cluster the samples (KMeans/hierarchical, silhouette-picked *k*).
-   - optional **scope** column → one independent PCA per group (e.g. per sample).
-4. **pca** — z-score features → PCA → per-observation pathway signatures.
-5. **viz** — 11 figures (scores heatmap, biplots, pairwise grid, signatures,
-   PC-loading bars/heatmaps, union views) + 3 TSVs, per scope.
+1. **Load** a single-cell `.h5ad` (summarised per cluster) or a
+   `features × samples` table (genes, proteins, etc.).
+2. **Enrich** each sample against gene sets, using one of:
+   - **ssGSEA** — a continuous score per pathway per sample.
+   - **EnrichR** — over-representation of each sample's top genes.
+   - **GoSlim** — coarse GO-slim category scores.
+3. **Group** — choose what to compare / colour by:
+   - a **metadata column** (e.g. `treatment`, `cell type`, `classification`),
+   - **existing** cluster labels, or
+   - **automatic** clustering when you have no labels.
+   Optionally run **one PCA per sample** (or per any grouping).
+4. **PCA + figures** — see which pathways drive the variation, and which
+   pathways define each group, as ready-to-use PDFs and tables.
 
-## Install (uv)
+## Install
 
 ```bash
 uv venv --python 3.12
-uv pip install -e ".[all]"       # h5ad input + GoSlim + nicer figure labels
-uv pip install -e ".[all,dev]"   # + pytest for the test suite
+uv pip install -e ".[all]"
 ```
 
-Extras: `h5ad` (single-cell input), `goslim` (goatools), `viz`
-(adjustText + distinctipy), `dev` (pytest). Core install (`uv pip install -e .`)
-covers ssGSEA + EnrichR from a matrix. Run the tests with `uv run pytest -q`.
+(`[all]` adds single-cell `.h5ad` input, GoSlim, and nicer plot labels. Plain
+`uv pip install -e .` is enough for ssGSEA/EnrichR from a matrix.)
 
 ## Usage
 
-### Option A — run the whole pipeline (one call)
+### Run the whole thing in one call
 
-From the command line with a YAML config:
+From the command line with a config file:
 
 ```bash
-uv run pathwaytheme run examples/moh_sm.yaml
-uv run pathwaytheme init -o my_config.yaml     # write a template config to edit
+uv run pathwaytheme init -o my_config.yaml     # create a template to edit
+uv run pathwaytheme run my_config.yaml
 ```
 
-Or from Python — pass a YAML path, or set fields inline:
+Or from Python:
 
 ```python
 import pathwaytheme as pt
 
-pt.run_pipeline("examples/moh_sm.yaml")
+pt.run_pipeline("my_config.yaml")
 
-# ...or configure inline (dotted keys), no YAML needed:
+# ...or without a file:
 pt.run_pipeline(**{
-    "input.kind": "matrix", "input.matrix_path": "expr.tsv",
+    "input.matrix_path": "expr.tsv",
     "input.metadata_path": "meta.tsv",
+    "enrichment.backend": "ssgsea",
+    "enrichment.gmt_path": "go_bp.gmt",
+    "grouping.target_col": "treatment",
     "output_dir": "results",
 })
 ```
 
-### Option B — call each stage yourself
+See `examples/moh_sm.yaml` (single-cell → ssGSEA) and
+`examples/matrix_enrichr.yaml` (matrix → EnrichR) for full configs.
 
-Each stage is a single function; results flow straight into the next one:
+### Or run it step by step
+
+Each step is one function, and its output feeds the next:
 
 ```python
 import pathwaytheme as pt
 
-fm      = pt.load_matrix("expr.tsv", metadata="meta.tsv")   # or pt.load_h5ad("h5ad_dir/")
-scores  = pt.enrich(fm, backend="ssgsea", gmt="go_bp.gmt", geneset="GO_BP")
-groups  = pt.group(scores, mode="target", target_col="grp", scope_col="sample_id")
-results = pt.pca(scores, groups, size_col="n_cells")
+data    = pt.load_matrix("expr.tsv", metadata="meta.tsv")   # or pt.load_h5ad("h5ad_folder/")
+scores  = pt.enrich(data, backend="ssgsea", gmt="go_bp.gmt", geneset="GO_BP")
+groups  = pt.group(scores, mode="target", target_col="treatment")
+results = pt.pca(scores, groups)
 pt.figures(results, "results", geneset="GO_BP")
 ```
 
-Swap one line to change method — nothing downstream changes:
+Change the method by changing one line — the rest stays the same:
 
 ```python
-# EnrichR over-representation instead of ssGSEA:
-scores = pt.enrich(fm, backend="enrichr", gmt="go_bp.gmt", top_n=200)
+scores = pt.enrich(data, backend="enrichr", gmt="go_bp.gmt", top_n=200)     # over-representation
+scores = pt.enrich(data, backend="goslim",  gmt="goslim.gmt")               # GO-slim categories
 
-# GoSlim categories:
-scores = pt.enrich(fm, backend="goslim", gmt="goslim.gmt", goslim_score="fraction")
-
-# auto-cluster the samples instead of using a metadata column:
-groups = pt.group(scores, mode="auto", n_clusters=4)   # or omit n_clusters to auto-pick k
+groups = pt.group(scores, mode="auto", n_clusters=4)                        # cluster automatically
+groups = pt.group(scores, mode="target", target_col="cell_type",
+                  scope_col="sample_id")                                    # one PCA per sample
 ```
 
-Each `pt.*` wrapper accepts the extra options of its config
-(`pathwaytheme.config`); drop down to the stage modules
-(`pathwaytheme.io`, `.enrichment`, `.grouping`, `.pca`, `.viz`) for full control.
-
-### Inspecting results in code
+### Look at the numbers yourself
 
 ```python
-results = pt.pca(scores, groups)
-r = results[0]
-r.scores          # observations × PCs
-r.loadings        # PCs × pathways
-r.variance_explained
-r.signatures      # long table: cluster, pathway, signature_score, direction
+r = pt.pca(scores, groups)[0]
+r.scores               # samples positioned on each principal component
+r.loadings             # how much each pathway contributes to each component
+r.variance_explained   # how much variation each component captures
+r.signatures           # the pathways that define each group
 ```
 
-## Outputs
+## What you get
 
-Per PCA scope, written to `<output_dir>/<geneset>/sample_pca/<scope>/`:
+For each group (or sample), written to
+`results/<geneset>/sample_pca/<group>/`:
 
-| Kind | Files |
-|---|---|
-| Figures (11 PDF) | scores heatmap · PC1-PC2 biplot ×2 · pairwise grid ×2 · per-cluster signatures · PC-loading bars · pathway×PC heatmap + clustermap · union clustermap + signature |
-| Tables (3 TSV) | `variance_explained` · `top_pathways_per_pc` · `per_cluster_signatures` |
+- **11 figures** — scores heatmap, PC1–PC2 biplots, a pairwise-PC grid,
+  per-group pathway signatures, per-component top pathways, and pathway
+  loading heatmaps.
+- **3 tables** — variance explained, top pathways per component, and the
+  per-group pathway signatures.
 
-## Pipeline stages (modules)
+## Common options
 
-| Stage | Module | Contract out |
+| Where | Option | Meaning |
 |---|---|---|
-| Input | `pathwaytheme.io` | `FeatureMatrix` (features × samples) |
-| Enrichment | `pathwaytheme.enrichment` | `ScoreMatrix` (terms × samples) |
-| Grouping | `pathwaytheme.grouping` | `Grouping` (sample → label) |
-| PCA | `pathwaytheme.pca` | `PCAResult` (per scope) |
-| Viz | `pathwaytheme.viz` | PDFs + TSVs |
-
-## Verified against MOH_SM
-
-The ported stages were checked against the original MOH_SM outputs:
-
-- **ssGSEA**: pooled 26-sample pseudobulk reproduces the golden NES matrix
-  (Pearson r = 1.000000).
-- **PCA**: variance explained, PC loadings, and per-cluster signatures are
-  bit-exact vs the golden rollout TSVs (diffs ~1e-16).
-- **Figures + tables**: identical 14-file output set; the 3 TSVs are
-  byte-identical to golden.
+| `enrich` | `backend` | `ssgsea` · `enrichr` · `goslim` |
+| `enrich` | `gmt` | path to a gene-set `.gmt` file |
+| `enrich` | `top_n` / `threshold` | how EnrichR/GoSlim pick each sample's genes |
+| `group` | `mode` | `target` · `existing` · `auto` |
+| `group` | `target_col` | metadata column to compare/colour by |
+| `group` | `scope_col` | run a separate PCA within each value of this column |
+| `pca` | `size_col` | metadata column that sets dot sizes (e.g. cell counts) |
