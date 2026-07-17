@@ -24,13 +24,17 @@ from typing import Optional, Union
 import pandas as pd
 
 from .config import (PipelineConfig, InputConfig, EnrichmentConfig,
-                     GroupingConfig, PCAConfig, VizConfig)
-from .contracts import FeatureMatrix, ScoreMatrix, Grouping, PCAResult
+                     GroupingConfig, PCAConfig, DiffConfig, VizConfig)
+from .contracts import (FeatureMatrix, ScoreMatrix, Grouping, PCAResult,
+                        DiffResult, SampleMetadata)
 from .io import load_input
 from .enrichment import run_enrichment
 from .grouping import resolve_grouping
 from .pca import run_pca_scopes
-from .viz import render_pca_figures, write_pca_tables
+from .diff import run_diff
+from .categories import load_category_map, summarize_by_category
+from .viz import (render_pca_figures, write_pca_tables, render_sanity_heatmap,
+                  render_diff_figures, write_diff_table, write_category_table)
 
 
 # ── stage 1: input ────────────────────────────────────────────────────────
@@ -48,6 +52,30 @@ def load_h5ad(directory: Optional[str] = None, files: Optional[list[str]] = None
     return load_input(InputConfig(kind="h5ad", h5ad_dir=directory,
                                   h5ad_paths=files or [], cluster_col=cluster_col,
                                   sample_col=sample_col, aggregate=aggregate))
+
+
+# ── optional: select samples by a metadata value ──────────────────────────
+def filter_samples(obj: Union[FeatureMatrix, ScoreMatrix], column: str,
+                   keep) -> Union[FeatureMatrix, ScoreMatrix]:
+    """Keep only samples whose ``metadata[column]`` is in ``keep``.
+
+    Works on a FeatureMatrix (before enrichment) or a ScoreMatrix (after), e.g.
+    ``fm = pt.filter_samples(fm, "OncoTree_Code", ["ASPS"])`` to run the rest of
+    the pipeline on one tumour type.
+    """
+    keep = {str(v) for v in ([keep] if isinstance(keep, str) else keep)}
+    meta = obj.metadata.table
+    if column not in meta.columns:
+        raise KeyError(f"metadata column {column!r} not found; available: "
+                       f"{list(meta.columns)}")
+    cols = [s for s in obj.data.columns if str(meta.loc[s, column]) in keep]
+    if not cols:
+        raise ValueError(f"no samples have {column} in {sorted(keep)}")
+    sub = obj.data.loc[:, cols]
+    new_meta = SampleMetadata(meta.loc[cols])
+    if isinstance(obj, FeatureMatrix):
+        return FeatureMatrix(sub, new_meta)
+    return ScoreMatrix(sub, new_meta, backend=obj.backend, geneset=obj.geneset)
 
 
 # ── stage 2: enrichment ────────────────────────────────────────────────────
@@ -90,6 +118,51 @@ def pca(sm: ScoreMatrix, grouping: Optional[Grouping] = None, *,
     return run_pca_scopes(sm, grouping, PCAConfig(**kwargs),
                           display_col=display_col, sublabel_col=secondary_col,
                           size_col=size_col)
+
+
+# ── optional stage: differential pathway analysis ─────────────────────────
+def diff(sm: ScoreMatrix, grouping: Optional[Grouping] = None, *,
+         method: str = "welch", group_col: Optional[str] = None,
+         reference: Optional[str] = None, contrasts=None,
+         **kwargs) -> DiffResult:
+    """Compare pathway scores between groups -> DiffResult (per-pathway p/FDR).
+
+    ``method`` is "welch" | "mannwhitney" | "moderated_t".  Groups come from
+    ``group_col`` (a metadata column) or from ``grouping``.  With no
+    ``reference``/``contrasts`` this runs one-vs-rest for every group; pass
+    ``reference="X"`` for every-group-vs-X or ``contrasts=[["A","B"], ...]``.
+    """
+    cfg = DiffConfig(enabled=True, method=method, group_col=group_col,
+                     reference=reference, contrasts=contrasts, **kwargs)
+    return run_diff(sm, cfg, grouping)
+
+
+def summarize_categories(table, mapping, *, key_col: str = "pathway",
+                         value_col: str = "effect",
+                         group_cols: Optional[list] = None,
+                         stat: str = "mean"):
+    """Roll a result table up into broad categories.
+
+    ``table`` is a DiffResult, its ``.table``, or any long DataFrame with a
+    pathway column.  ``mapping`` is a term->category dict/Series or a path to a
+    TSV (loaded via :func:`load_category_map`).
+    """
+    if isinstance(table, DiffResult):
+        table = table.table
+    if isinstance(mapping, (str, Path)):
+        mapping = load_category_map(mapping, key_col=key_col)
+    default_groups = ["comparison"] if "comparison" in table.columns else None
+    return summarize_by_category(
+        table, mapping, key_col=key_col, value_col=value_col,
+        group_cols=group_cols if group_cols is not None else default_groups,
+        stat=stat)
+
+
+def sanity_heatmap(sm: ScoreMatrix, out_path: str, *, label_col: Optional[str] = None,
+                   max_pathways: int = 200, dpi: int = 120):
+    """Write a z-scored pathway x sample QC heatmap of the whole score matrix."""
+    return render_sanity_heatmap(sm, out_path, label_col=label_col,
+                                 max_pathways=max_pathways, dpi=dpi)
 
 
 # ── stage 5: figures + tables ──────────────────────────────────────────────

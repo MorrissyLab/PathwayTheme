@@ -145,6 +145,31 @@ class Grouping:
 
 
 @dataclass
+class DiffResult:
+    """Differential pathway analysis: per-pathway comparison of scores between groups.
+
+    ``table`` is long — one row per (comparison, pathway):
+        comparison, pathway, method, n_case, n_reference,
+        mean_case, mean_reference, effect (= mean_case - mean_reference),
+        statistic, p_value, fdr, direction ("up"/"down").
+    Several comparisons (e.g. one-vs-rest per group) are stacked in one table.
+    """
+
+    table: pd.DataFrame
+    method: str = "welch"
+    group_col: str = "group"
+
+    @property
+    def comparisons(self) -> list[str]:
+        if "comparison" not in self.table.columns:
+            return []
+        return list(pd.unique(self.table["comparison"]))
+
+    def significant(self, alpha: float = 0.05) -> pd.DataFrame:
+        return self.table[self.table["fdr"] < alpha]
+
+
+@dataclass
 class PCAResult:
     """Output of one PCA run over a single scope."""
 

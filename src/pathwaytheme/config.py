@@ -35,6 +35,10 @@ class InputConfig:
     cluster_col: str = "seurat_clusters"
     sample_col: str = "Sample_name"
     aggregate: str = "mean"              # per-cluster pseudobulk aggregation
+    # --- optional upstream sample selection (keep only samples whose
+    #     metadata[filter_col] is in filter_values, e.g. one tumor type) ---
+    filter_col: Optional[str] = None
+    filter_values: Optional[list[str]] = None
 
 
 @dataclass
@@ -95,11 +99,48 @@ class PCAConfig:
 
 
 @dataclass
+class DiffConfig:
+    """Differential pathway analysis on the score matrix (parallel to PCA).
+
+    Compares pathway scores between the groups given by ``group_col`` (defaults
+    to ``grouping.target_col``).  With no ``reference`` and no explicit
+    ``contrasts`` this runs one-vs-rest for every group.
+    """
+
+    enabled: bool = False
+    group_col: Optional[str] = None         # metadata column; None -> grouping.target_col
+    method: str = "welch"                    # "welch" | "mannwhitney" | "moderated_t"
+    reference: Optional[str] = None          # reference group; None -> one-vs-rest
+    contrasts: Optional[list[list[str]]] = None   # explicit [[case, reference], ...]
+    min_group_size: int = 2
+    top_n: int = 25                          # pathways shown in figures
+
+
+@dataclass
+class CategoryConfig:
+    """Downstream roll-up of pathway-level results into broad categories.
+
+    A term -> category mapping is read from a TSV (``map_path`` with columns
+    ``key_col`` / ``category_col``).  The summary aggregates a numeric column
+    (differential effect, or a PC loading) per category.
+    """
+
+    enabled: bool = False
+    map_path: Optional[str] = None
+    key_col: str = "pathway"
+    category_col: str = "category"
+    stat: str = "mean"                       # "mean" | "median" | "sum"
+    unmapped_label: str = "Other"
+
+
+@dataclass
 class VizConfig:
     make_figures: bool = True
     make_tables: bool = True
     dpi: int = 120
     formats: list[str] = field(default_factory=lambda: ["pdf"])
+    sanity_heatmap: bool = False             # full pathway x sample z-scored QC heatmap
+    sanity_max_pathways: int = 200           # cap most-variable pathways (0 = all)
 
 
 @dataclass
@@ -108,6 +149,8 @@ class PipelineConfig:
     enrichment: EnrichmentConfig = field(default_factory=EnrichmentConfig)
     grouping: GroupingConfig = field(default_factory=GroupingConfig)
     pca: PCAConfig = field(default_factory=PCAConfig)
+    diff: DiffConfig = field(default_factory=DiffConfig)
+    categories: CategoryConfig = field(default_factory=CategoryConfig)
     viz: VizConfig = field(default_factory=VizConfig)
     output_dir: str = "pathwaytheme_output"
 
@@ -127,6 +170,8 @@ class PipelineConfig:
             enrichment=EnrichmentConfig(**(d.get("enrichment") or {})),
             grouping=GroupingConfig(**(d.get("grouping") or {})),
             pca=PCAConfig(**(d.get("pca") or {})),
+            diff=DiffConfig(**(d.get("diff") or {})),
+            categories=CategoryConfig(**(d.get("categories") or {})),
             viz=VizConfig(**(d.get("viz") or {})),
             output_dir=d.get("output_dir", "pathwaytheme_output"),
         )

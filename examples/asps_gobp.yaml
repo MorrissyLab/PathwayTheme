@@ -1,0 +1,57 @@
+# ASPS-style workflow: bulk matrix -> GO:BP ssGSEA -> PCA + differential + categories.
+#
+# Reproduces the shape of the reference ASPS R workflow inside PathwayTheme:
+#   1. load a bulk expression matrix + sample metadata
+#   2. keep only one tumour type (ASPS) via the upstream sample filter
+#   3. GO:BP ssGSEA -> pathway score matrix
+#   4. PCA over the samples (unsupervised axes of variation)
+#   5. differential pathway analysis between sample groups (limma-style moderated t)
+#   6. roll the differential results up into broad GO categories
+#   7. a full pathway x sample sanity heatmap for QC
+
+input:
+  kind: matrix
+  matrix_path: "data/expression.tsv"    # rows = genes, cols = samples (log2 TPM etc.)
+  metadata_path: "data/metadata.tsv"    # index = sample id; has OncoTree_Code, Sample_Type
+  sep: "\t"
+  # keep only ASPS samples before enrichment (the "select relevant samples" step)
+  filter_col: "OncoTree_Code"
+  filter_values: ["ASPS"]
+
+enrichment:
+  backend: ssgsea
+  geneset: GOBP
+  gmt_path: "data/c5.go.bp.symbols.gmt"
+  min_gene_set_size: 10
+  max_gene_set_size: 500
+
+grouping:
+  mode: target
+  target_col: "Sample_Type"             # e.g. TUMOR / CELL_LINE / PDX
+
+pca:
+  k_max: 10
+
+# differential pathway analysis (parallel to PCA), one-vs-rest per Sample_Type
+diff:
+  enabled: true
+  method: moderated_t                    # welch | mannwhitney | moderated_t
+  # reference: "TUMOR"                    # or set a reference group
+  # contrasts: [["TUMOR", "CELL_LINE"]]  # or name explicit pairs
+  top_n: 25
+
+# downstream roll-up of the differential table into broad categories
+categories:
+  enabled: true
+  map_path: "data/gobp_category_map.tsv" # columns: pathway, category
+  key_col: pathway
+  category_col: category
+  stat: mean
+
+viz:
+  make_figures: true
+  make_tables: true
+  sanity_heatmap: true                   # full pathway x sample z-scored QC heatmap
+  sanity_max_pathways: 200               # cap most-variable pathways (0 = all)
+
+output_dir: "asps_pathway_output"
