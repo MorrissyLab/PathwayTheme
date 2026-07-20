@@ -158,6 +158,39 @@ def test_summarize_unmapped_go_to_other():
     assert "Other" in set(out["category"])
 
 
+def test_summarize_significance_split():
+    table = pd.DataFrame({
+        "pathway": ["p1", "p2", "p3", "p4"],
+        "effect": [2.0, 1.0, -1.0, 0.5],
+        "fdr": [0.001, 0.20, 0.01, 0.90],   # p1,p3 sig; p2,p4 not
+    })
+    mapping = {"p1": "A", "p2": "A", "p3": "B", "p4": "B"}
+    out = summarize_by_category(table, mapping, value_col="effect",
+                                significance_col="fdr", alpha=0.05)
+    assert "significance" in out.columns
+    assert set(out["significance"]) == {"significant", "non_significant"}
+    a_sig = out[(out["category"] == "A") & (out["significance"] == "significant")]
+    a_ns = out[(out["category"] == "A") & (out["significance"] == "non_significant")]
+    assert a_sig.iloc[0]["n_pathways"] == 1        # only p1
+    assert a_ns.iloc[0]["n_pathways"] == 1         # only p2
+
+
+def test_summarize_significance_nan_is_nonsignificant():
+    table = pd.DataFrame({"pathway": ["p1"], "effect": [1.0], "fdr": [np.nan]})
+    out = summarize_by_category(table, {"p1": "A"}, value_col="effect",
+                                significance_col="fdr", alpha=0.05)
+    assert out.iloc[0]["significance"] == "non_significant"
+
+
+def test_summarize_categories_api_significance(score_matrix):
+    d = pt.diff(score_matrix, group_col="grp", method="welch", reference="lo")
+    mapping = {t: ("early" if i < 20 else "late")
+               for i, t in enumerate(f"TERM_{i:02d}" for i in range(40))}
+    summ = pt.summarize_categories(d, mapping, value_col="effect",
+                                   significance_col="fdr", alpha=0.05)
+    assert "significance" in summ.columns
+
+
 # ── api helpers ─────────────────────────────────────────────────────────────
 def test_filter_samples_matrix(feature_matrix):
     sub = pt.filter_samples(feature_matrix, "grp", ["hi"])

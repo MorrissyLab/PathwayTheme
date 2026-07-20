@@ -140,12 +140,17 @@ def diff(sm: ScoreMatrix, grouping: Optional[Grouping] = None, *,
 def summarize_categories(table, mapping, *, key_col: str = "pathway",
                          value_col: str = "effect",
                          group_cols: Optional[list] = None,
-                         stat: str = "mean"):
+                         stat: str = "mean",
+                         significance_col: Optional[str] = None,
+                         alpha: float = 0.05):
     """Roll a result table up into broad categories.
 
     ``table`` is a DiffResult, its ``.table``, or any long DataFrame with a
     pathway column.  ``mapping`` is a term->category dict/Series or a path to a
     TSV (loaded via :func:`load_category_map`).
+
+    Pass ``significance_col="fdr"`` (or ``"p_value"``) to split each category
+    into significant (``< alpha``) vs non-significant pathways.
     """
     if isinstance(table, DiffResult):
         table = table.table
@@ -155,7 +160,7 @@ def summarize_categories(table, mapping, *, key_col: str = "pathway",
     return summarize_by_category(
         table, mapping, key_col=key_col, value_col=value_col,
         group_cols=group_cols if group_cols is not None else default_groups,
-        stat=stat)
+        stat=stat, significance_col=significance_col, alpha=alpha)
 
 
 def sanity_heatmap(sm: ScoreMatrix, out_path: str, *, label_col: Optional[str] = None,

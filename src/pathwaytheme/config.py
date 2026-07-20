@@ -131,6 +131,10 @@ class CategoryConfig:
     category_col: str = "category"
     stat: str = "mean"                       # "mean" | "median" | "sum"
     unmapped_label: str = "Other"
+    # split each category into significant vs non-significant pathways
+    split_significance: bool = True
+    significance_col: str = "fdr"            # "fdr" | "p_value"
+    alpha: float = 0.05
 
 
 @dataclass

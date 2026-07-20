@@ -126,6 +126,16 @@ term → category mapping (a TSV, or a GO-ID → GO-slim map via goatools). For 
 `(comparison, category)` it reports the mean/median/sum of the effect, the
 number of pathways, and how many go up vs down.
 
+**Significant vs non-significant split.** By default the roll-up splits each
+category into `significant` (FDR < `alpha`, default 0.05) and `non_significant`
+pathways, adding a `significance` column — so you can see, per category, how the
+significant hits behave versus the background. This mirrors the
+`split_limma_significance` / `analyze_GO_groups` step in the reference ASPS
+GO-slim analysis. Set `split_significance: false` (or `significance_col=None`)
+to summarize every category as a whole, and `significance_col: p_value` to
+threshold on the raw p-value instead of FDR. NaN thresholds count as
+non-significant.
+
 > **Note on GoSlim.** This is the *downstream* use of GO-slim: collapsing GO:BP
 > **results** into broad biological themes — distinct from PathwayTheme's GoSlim
 > *enrichment backend*, which uses GO-slim *upstream* to build the score matrix

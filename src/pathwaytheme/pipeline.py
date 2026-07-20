@@ -151,11 +151,14 @@ def run(config: PipelineConfig, *, verbose: bool = True) -> PipelineResult:
             mapping = load_category_map(
                 config.categories.map_path, key_col=config.categories.key_col,
                 category_col=config.categories.category_col)
+            sig_col = (config.categories.significance_col
+                       if config.categories.split_significance else None)
             category_summary = summarize_by_category(
                 diff_result.table, mapping,
                 key_col="pathway", value_col="effect",
                 group_cols=["comparison"], stat=config.categories.stat,
-                unmapped_label=config.categories.unmapped_label)
+                unmapped_label=config.categories.unmapped_label,
+                significance_col=sig_col, alpha=config.categories.alpha)
             if config.viz.make_tables:
                 dpaths += write_category_table(category_summary, analysis_root, base_prefix)
         written.setdefault("_diff", []).extend(dpaths)

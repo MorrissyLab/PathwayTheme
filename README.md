@@ -104,7 +104,8 @@ categories:
 ```python
 d = pt.diff(scores, groups, method="moderated_t")           # welch | mannwhitney | moderated_t
 d.significant(0.05)                                         # per-pathway effect, p, FDR
-summary = pt.summarize_categories(d, "gobp_categories.tsv") # broad-category roll-up
+summary = pt.summarize_categories(d, "gobp_categories.tsv", # broad-category roll-up,
+                                  significance_col="fdr")   # split: significant vs not
 
 pt.sanity_heatmap(scores, "qc.pdf", label_col="treatment")  # full-matrix QC heatmap
 ```
@@ -165,4 +166,5 @@ r.signatures           # the pathways that define each group
 | `diff` | `method` | `welch` · `mannwhitney` · `moderated_t` (limma-style) |
 | `diff` | `reference` / `contrasts` | reference group, or explicit `[[case, ref], …]` (default: one-vs-rest) |
 | `summarize_categories` | `mapping` | term → category map (dict/Series or `.tsv`) |
+| `summarize_categories` | `significance_col` | split each category into significant vs non-significant (e.g. `fdr`, `alpha=0.05`) |
 | `sanity_heatmap` | `label_col` | metadata label for the QC heatmap colour strip |

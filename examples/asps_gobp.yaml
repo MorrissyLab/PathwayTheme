@@ -47,6 +47,9 @@ categories:
   key_col: pathway
   category_col: category
   stat: mean
+  split_significance: true               # split each category into sig vs non-sig
+  significance_col: fdr                   # fdr | p_value
+  alpha: 0.05
 
 viz:
   make_figures: true

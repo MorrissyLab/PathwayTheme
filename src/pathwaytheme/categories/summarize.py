@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Optional, Union
 
+import numpy as np
 import pandas as pd
 
 
@@ -25,11 +26,18 @@ def summarize_by_category(table: pd.DataFrame,
                           value_col: str = "effect",
                           group_cols: Optional[list[str]] = None,
                           stat: str = "mean",
-                          unmapped_label: str = "Other") -> pd.DataFrame:
+                          unmapped_label: str = "Other",
+                          significance_col: Optional[str] = None,
+                          alpha: float = 0.05) -> pd.DataFrame:
     """Aggregate ``value_col`` per category (optionally within ``group_cols``).
 
-    Returns a table with one row per (group..., category):
+    Returns a table with one row per (group..., [significance,] category):
     ``<stat>_<value_col>``, ``n_pathways``, ``n_up``, ``n_down``.
+
+    If ``significance_col`` is given (e.g. ``"fdr"``), each category is split
+    into ``significant`` (value < ``alpha``) vs ``non_significant`` rows, adding
+    a ``significance`` column — the sig-vs-nonsig-per-category summary from the
+    reference ASPS GO-slim analysis.  NaN thresholds count as non-significant.
     """
     if key_col not in table.columns:
         raise KeyError(f"key_col {key_col!r} not in table columns {list(table.columns)}")
@@ -42,7 +50,16 @@ def summarize_by_category(table: pd.DataFrame,
     df = table.copy()
     df["category"] = df[key_col].astype(str).map(m).fillna(unmapped_label)
 
-    keys = [c for c in (group_cols or []) if c in df.columns] + ["category"]
+    keys = [c for c in (group_cols or []) if c in df.columns]
+    if significance_col is not None:
+        if significance_col not in df.columns:
+            raise KeyError(f"significance_col {significance_col!r} not in table "
+                           f"columns {list(table.columns)}")
+        is_sig = df[significance_col].to_numpy(dtype=float) < alpha  # NaN -> False
+        df["significance"] = np.where(is_sig, "significant", "non_significant")
+        keys = keys + ["significance"]
+    keys = keys + ["category"]
+
     df["_is_up"] = (df[value_col] > 0).astype(int)
     df["_is_down"] = (df[value_col] < 0).astype(int)
 
