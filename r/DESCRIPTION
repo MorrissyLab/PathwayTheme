@@ -1,0 +1,32 @@
+Package: pathwaytheme
+Title: Pathway-Level Summaries of Any Omic Data
+Version: 0.1.0
+Authors@R:
+    person("Aly", "Abdelkareem", email = "aly@aidachip.com", role = c("aut", "cre"))
+Description: Turns any features-by-samples omic matrix into a pathway-level
+    summary: enrichment (ssGSEA, over-representation, GO-slim) then grouping,
+    principal component analysis, optional differential pathway testing and
+    category roll-up, and a fixed set of publication figures and tables.  This
+    is the R implementation of the PathwayTheme pipeline; it mirrors the Python
+    package stage for stage and produces the same tables and figures.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Depends:
+    R (>= 4.1)
+Imports:
+    grDevices,
+    grid,
+    gridExtra,
+    ggplot2,
+    ggrepel,
+    stats,
+    utils,
+    yaml
+Suggests:
+    enrichR,
+    hdf5r,
+    limma,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+RoxygenNote: 7.3.3
+Roxygen: list(markdown = TRUE)
