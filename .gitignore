@@ -11,6 +11,13 @@ dist/
 venv/
 .uv/
 
+# R
+*.Rcheck/
+*.tar.gz
+.Rproj.user/
+.Rhistory
+.RData
+
 # Test / tooling
 .pytest_cache/
 .coverage
@@ -31,3 +38,7 @@ notebook_output/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Case studies, drafts and everything behind them: kept on disk, never
+# committed.  The manuscript notebooks that are released live in manuscript/.
+paper/

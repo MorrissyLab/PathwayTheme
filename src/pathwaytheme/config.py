@@ -52,6 +52,11 @@ class EnrichmentConfig:
     max_gene_set_size: int = 5000
     threads: int = 8
     cache_dir: Optional[str] = None      # reuse computed score matrix if present
+    # --- missing values in the feature matrix (matters for MS proteomics,
+    #     which is distributed with ~20% of entries absent).  Defaults are a
+    #     no-op: they change no result, they only make the choice visible. ---
+    missing: str = "as_is"               # "as_is" | "zero" | "low"
+    min_observed_fraction: float = 0.0   # drop features measured in fewer samples
     # --- ssgsea ---
     weight: float = 0.25
     # --- enrichr ---
@@ -96,6 +101,36 @@ class PCAConfig:
     min_observations: int = 3            # need >=3 columns for a meaningful PCA
     min_features: int = 10
     random_state: int = 42
+    # marks the elbow on the scree plot; annotation only, it does not truncate
+    # the result -- K is still min(n_obs - 1, k_max)
+    elbow_components: Optional[int] = None
+
+
+@dataclass
+class MetadataConfig:
+    """Associate each principal component with each sample attribute.
+
+    Answers "what is this component?" against annotated variables rather than by
+    eye: categorical variables by Kruskal-Wallis with eta-squared, continuous by
+    Spearman, BH-corrected over the whole component x variable grid.  Naming a
+    variable in ``technical`` only changes how it is labelled in the figure, so a
+    technical source is visually separable from a biological one.
+
+    The omnibus test says a component separates the levels of a variable, not
+    which level.  ``per_level`` adds the one-versus-rest breakdown -- each level
+    of each categorical variable against the rest, Mann-Whitney with a signed
+    rank-biserial effect -- which is what identifies a component as the axis of
+    one particular subtype.
+    """
+
+    enabled: bool = False
+    columns: list[str] = field(default_factory=list)   # empty -> every column
+    technical: list[str] = field(default_factory=list)
+    min_group_size: int = 3
+    alpha: float = 0.05
+    plot_components: Optional[int] = None              # rows in the figure
+    per_level: bool = True                             # one-vs-rest per level
+    per_level_columns: list[str] = field(default_factory=list)  # empty -> all
 
 
 @dataclass
@@ -118,7 +153,7 @@ class DiffConfig:
 
 @dataclass
 class CategoryConfig:
-    """Downstream roll-up of pathway-level results into broad categories.
+    """Downstream summarisation of pathway-level results into broad categories.
 
     A term -> category mapping is read from a TSV (``map_path`` with columns
     ``key_col`` / ``category_col``).  The summary aggregates a numeric column
@@ -135,6 +170,7 @@ class CategoryConfig:
     split_significance: bool = True
     significance_col: str = "fdr"            # "fdr" | "p_value"
     alpha: float = 0.05
+    plot_top_themes: int = 20                # rows in the theme heatmap
 
 
 @dataclass
@@ -145,6 +181,13 @@ class VizConfig:
     formats: list[str] = field(default_factory=lambda: ["pdf"])
     sanity_heatmap: bool = False             # full pathway x sample z-scored QC heatmap
     sanity_max_pathways: int = 200           # cap most-variable pathways (0 = all)
+    # The 11 exploratory panels label every observation, so their canvas grows
+    # with the number of observations -- readable for tens of clusters, a
+    # metre-tall clustermap for a cohort of hundreds of samples.  Turning them
+    # off keeps the cheap diagnostics (scree, metadata scatter, attribution
+    # grids), which are the ones a large cohort is actually read through.
+    exploratory_panels: bool = True
+    exploratory_max_observations: int = 200  # 0 = no cap
 
 
 @dataclass
@@ -153,6 +196,7 @@ class PipelineConfig:
     enrichment: EnrichmentConfig = field(default_factory=EnrichmentConfig)
     grouping: GroupingConfig = field(default_factory=GroupingConfig)
     pca: PCAConfig = field(default_factory=PCAConfig)
+    metadata: MetadataConfig = field(default_factory=MetadataConfig)
     diff: DiffConfig = field(default_factory=DiffConfig)
     categories: CategoryConfig = field(default_factory=CategoryConfig)
     viz: VizConfig = field(default_factory=VizConfig)
@@ -174,6 +218,7 @@ class PipelineConfig:
             enrichment=EnrichmentConfig(**(d.get("enrichment") or {})),
             grouping=GroupingConfig(**(d.get("grouping") or {})),
             pca=PCAConfig(**(d.get("pca") or {})),
+            metadata=MetadataConfig(**(d.get("metadata") or {})),
             diff=DiffConfig(**(d.get("diff") or {})),
             categories=CategoryConfig(**(d.get("categories") or {})),
             viz=VizConfig(**(d.get("viz") or {})),

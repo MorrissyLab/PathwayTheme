@@ -20,7 +20,7 @@ def write_diff_table(result: DiffResult, out_dir: str | Path, prefix: str) -> li
 
 def write_category_table(summary: pd.DataFrame, out_dir: str | Path,
                          prefix: str) -> list[Path]:
-    """Write a category roll-up summary table."""
+    """Write a category summary table."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     p = out_dir / f"{prefix}_category_summary.tsv"

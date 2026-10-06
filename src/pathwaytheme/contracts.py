@@ -89,6 +89,10 @@ class ScoreMatrix:
     metadata: SampleMetadata
     backend: str = "unknown"
     geneset: str = "unknown"
+    #: per requested gene set, how many members were measurable and whether it
+    #: was scored -- see ``enrichment.coverage``.  None when the backend does
+    #: not work from an explicit gene-set file.
+    coverage: Optional[pd.DataFrame] = None
 
     def __post_init__(self) -> None:
         self.data = self.data.copy()
@@ -110,7 +114,8 @@ class ScoreMatrix:
     def subset_samples(self, columns) -> "ScoreMatrix":
         cols = [str(c) for c in columns]
         return ScoreMatrix(self.data.loc[:, cols], self.metadata.align_to(cols),
-                           backend=self.backend, geneset=self.geneset)
+                           backend=self.backend, geneset=self.geneset,
+                           coverage=self.coverage)
 
 
 @dataclass

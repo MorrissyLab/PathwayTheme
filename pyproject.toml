@@ -28,6 +28,8 @@ goslim = ["goatools"]
 viz = ["adjustText", "distinctipy"]
 all = ["anndata", "goatools", "adjustText", "distinctipy"]
 dev = ["pytest"]
+# the case-study notebooks in paper/sarcoma/notebooks
+paper = ["jupyterlab", "ipykernel", "nbformat", "nbclient"]
 
 [project.scripts]
 pathwaytheme = "pathwaytheme.cli:main"

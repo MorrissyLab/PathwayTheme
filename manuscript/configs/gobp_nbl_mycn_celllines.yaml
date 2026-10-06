@@ -1,0 +1,68 @@
+# The same contrast among the 39 neuroblastoma cell lines.
+#
+# The specificity control. A cell line has no immune infiltrate, so an immune difference that is infiltrate must weaken here while a MYCN programme intrinsic to the tumour cell need not.
+#
+# The grouping column is Brohl et al. Table S1A's own MYCN call, joined by
+# analysis.link as `brohl_diagnosis_code`; the twelve tumours
+# they could not type are excluded.  The sample list is written by analysis.mycn.write_mycn_metadata().
+#
+#   cd manuscript && uv run pathwaytheme run configs/gobp_nbl_mycn_celllines.yaml
+
+input:
+  kind: matrix
+  matrix_path: "data/processed/expression_log2.tsv"
+  metadata_path: "nbl_mycn/metadata_celllines.tsv"
+  sep: "\t"
+  # everything outside this run's subset is `not_applicable` in that column
+  filter_col: "mycn_status"
+  filter_values: ["MYCN.A", "MYCN.NA"]
+
+enrichment:
+  backend: ssgsea
+  geneset: GOBP
+  gmt_path: "data/genesets/GOBP.gmt"
+  min_gene_set_size: 10
+  max_gene_set_size: 500
+  threads: 8
+  # the cache all ten runs share: ssGSEA is per sample, so
+  # restricting to a subset costs no enrichment pass
+  cache_dir: "results/scores"
+
+grouping:
+  mode: target
+  target_col: "mycn_status"
+
+pca:
+  k_max: 10
+  elbow_components: 3
+
+metadata:
+  enabled: true
+  columns: ["mycn_status", "library_type", "rin", "seq_kit", "zero_fraction"]
+  technical: ["library_type", "rin", "seq_kit", "zero_fraction"]
+  min_group_size: 3
+  plot_components: 6
+  per_level: true
+
+diff:
+  enabled: true
+  method: moderated_t
+  contrasts:
+    - ["MYCN.A", "MYCN.NA"]
+  top_n: 25
+
+categories:
+  enabled: true
+  map_path: "data/genesets/gobp_category_map.tsv"
+  key_col: pathway
+  category_col: category
+  stat: mean
+  split_significance: true
+  significance_col: fdr
+  alpha: 0.05
+
+viz:
+  make_figures: false
+  make_tables: true
+
+output_dir: "nbl_mycn/results/gobp_nbl_mycn_celllines"

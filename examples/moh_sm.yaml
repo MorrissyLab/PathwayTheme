@@ -1,4 +1,4 @@
-# Reproduces the MOH_SM ssGSEA -> per-sample PCA workflow.
+# Single-cell .h5ad -> per-cluster pseudobulk -> ssGSEA -> one PCA per sample.
 #
 #   input:      single-cell .h5ad files  -> per-cluster pseudobulk
 #   enrichment: ssGSEA against a GO-BP .gmt  -> NES matrix (terms x sample|cluster)
@@ -11,7 +11,7 @@
 
 input:
   kind: h5ad
-  h5ad_dir: "Z:/University of Calgary/Morrissy Lab - Documents/MOH_MultiOmics/cellbender_r_objects"
+  h5ad_dir: "data/h5ad"                 # a folder of .h5ad files, one per sample
   cluster_col: seurat_clusters
   sample_col: Sample_name
   aggregate: mean
@@ -19,7 +19,7 @@ input:
 enrichment:
   backend: ssgsea
   geneset: GO_BP
-  gmt_path: "C:/Users/alyos/Downloads/msigdb_2025.1_Hs_selected/c5.go.bp.v2025.1.Hs.symbols.gmt"
+  gmt_path: "data/c5.go.bp.symbols.gmt"    # MSigDB GO:BP; download it yourself, not redistributable
   min_gene_set_size: 5
   max_gene_set_size: 5000
   threads: 8

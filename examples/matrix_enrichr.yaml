@@ -14,7 +14,7 @@ input:
 enrichment:
   backend: enrichr
   geneset: GOBP_ORA
-  gmt_path: "C:/Users/alyos/Downloads/msigdb_2025.1_Hs_selected/c5.go.bp.v2025.1.Hs.symbols.gmt"
+  gmt_path: "data/c5.go.bp.symbols.gmt"    # MSigDB GO:BP; download it yourself, not redistributable
   gene_selection: top_n          # or "threshold" (+ threshold: <value>)
   top_n: 200
   enrichr_score: "-log10_padj"   # or "combined_score"

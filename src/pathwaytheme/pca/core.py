@@ -36,6 +36,18 @@ def run_pca(score_df: pd.DataFrame,
 
     Returns ``None`` if the scope has too few observations / variable features.
     """
+    # A term is NaN for an observation only when it was scored for some samples
+    # and not others (differing gene coverage across a cached, incrementally
+    # filled score matrix).  0 is a legitimate ssGSEA value, so filling is not
+    # neutral -- say so rather than doing it silently.
+    n_na = int(score_df.isna().sum().sum())
+    if n_na:
+        import warnings
+        warnings.warn(
+            f"PCA scope {scope!r}: {n_na} missing score(s) filled with 0.0; "
+            f"0 is a valid enrichment score, so these observations are treated "
+            f"as average rather than unknown. Check the gene-set coverage table.",
+            stacklevel=2)
     X = score_df.fillna(0.0)
     n_features, n_obs = X.shape
     if n_obs < config.min_observations or n_features < config.min_features:

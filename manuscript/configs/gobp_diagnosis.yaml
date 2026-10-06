@@ -1,0 +1,79 @@
+# Tumours only, one-vs-rest per diagnosis -- the subtype question.
+#
+# `filter_col` restricts the run to primary tumours, so a subtype contrast
+# cannot be read as a tumour-versus-model difference: the cell-line panels are
+# concentrated in Ewing sarcoma, neuroblastoma and rhabdomyosarcoma, and leaving
+# them in would let those three subtypes borrow a cell-line signature.
+#
+# Ten subtypes clear the contrast size floor, alveolar soft part sarcoma and
+# synovial sarcoma among them.
+#
+#   cd manuscript && uv run pathwaytheme run configs/gobp_diagnosis.yaml
+
+input:
+  kind: matrix
+  matrix_path: "data/processed/expression_log2.tsv"
+  metadata_path: "data/processed/metadata.tsv"
+  sep: "\t"
+  filter_col: "sample_type"
+  filter_values: ["TUMOR"]
+
+enrichment:
+  backend: ssgsea
+  geneset: GOBP
+  gmt_path: "data/genesets/GOBP.gmt"
+  min_gene_set_size: 10
+  max_gene_set_size: 500
+  threads: 8
+  cache_dir: "results/scores"
+
+grouping:
+  mode: target
+  target_col: "diagnosis"
+  secondary_col: "library_type"
+
+pca:
+  k_max: 10
+  elbow_components: 3
+
+metadata:
+  enabled: true
+  # Three run-sheet columns are excluded on purpose.  `sequencing_centre` is
+  # constant -- the cohort is restricted to the public RNAseq Landscape centre --
+  # so it has no levels to separate.  `batch` is a delivered column whose values
+  # are literally "<Sample Type>@<Sequencing Centre>", which with one centre
+  # makes it `sample_type` re-spelled.  `run_id` resolves individual flowcells,
+  # most of them below the size floor.
+  columns: ["diagnosis", "sample_type",
+            "library_type", "rin", "seq_kit", "zero_fraction"]
+  technical: ["library_type", "rin", "seq_kit", "zero_fraction"]
+  min_group_size: 3
+  plot_components: 6
+  # also test each level of each categorical variable against the rest, so a
+  # component can be attributed to one subtype rather than to "diagnosis"
+  per_level: true
+
+diff:
+  enabled: true
+  method: moderated_t
+  top_n: 25
+
+categories:
+  enabled: true
+  map_path: "data/genesets/gobp_category_map.tsv"
+  key_col: pathway
+  category_col: category
+  stat: mean
+  split_significance: true
+  significance_col: fdr
+  alpha: 0.05
+
+viz:
+  # The PCA clustermaps over ~5,000 GO:BP terms take longer than the whole rest
+  # of the run and none of them is a panel in a one-figure note.  Tables are
+  # what the manuscript reads, and analysis.figures composes the figures
+  # from them using the same package plot functions.
+  make_figures: false
+  make_tables: true
+
+output_dir: "results/pipeline/gobp_diagnosis"

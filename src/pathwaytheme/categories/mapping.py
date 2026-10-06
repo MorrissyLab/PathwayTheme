@@ -1,4 +1,4 @@
-"""Load a term -> broad-category mapping used for downstream roll-up.
+"""Load a term -> broad-category mapping used for downstream summarisation.
 
 Two sources are supported:
 

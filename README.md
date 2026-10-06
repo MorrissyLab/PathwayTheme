@@ -4,8 +4,13 @@ Turn **any omic data** into a pathway-level summary:
 
 **enrichment (ssGSEA / EnrichR / GoSlim) → grouping → PCA (+ differential) → figures + tables.**
 
+Available in **Python** (this page) and **R** ([r/README.md](r/README.md)). Both
+are native implementations of the same pipeline: same YAML configs, same stages,
+same output files, checked against each other numerically.
+
 📄 **How the PCA step works (the math): [docs/METHODS.md](docs/METHODS.md).**
 📄 **Differential pathway analysis + category roll-up: [docs/DIFFERENTIAL.md](docs/DIFFERENTIAL.md).**
+📄 **R package (install, API, parity report): [r/README.md](r/README.md).**
 
 ## What it does
 
@@ -168,3 +173,23 @@ r.signatures           # the pathways that define each group
 | `summarize_categories` | `mapping` | term → category map (dict/Series or `.tsv`) |
 | `summarize_categories` | `significance_col` | split each category into significant vs non-significant (e.g. `fdr`, `alpha=0.05`) |
 | `sanity_heatmap` | `label_col` | metadata label for the QC heatmap colour strip |
+
+## Same pipeline in R
+
+```r
+remotes::install_local("r")
+library(pathwaytheme)
+
+pt_run_pipeline("my_config.yaml")          # the same YAML this page uses
+
+scores  <- pt_enrich(pt_load_matrix("expr.tsv", metadata = "meta.tsv"),
+                     backend = "ssgsea", gmt = "go_bp.gmt", geneset = "GO_BP")
+groups  <- pt_group(scores, mode = "target", target_col = "treatment")
+pt_figures(pt_pca(scores, groups), "results", geneset = "GO_BP")
+```
+
+The R package is native — it does not call Python — and every stage is verified
+against this implementation on shared inputs (38 checks, agreement to ~1e-13).
+Details, the full name mapping and the known differences are in
+[r/README.md](r/README.md); reproduce the comparison with
+`python r/parity/run_python.py && Rscript r/parity/compare.R`.

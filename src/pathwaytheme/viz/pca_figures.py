@@ -55,12 +55,31 @@ def _short_label(lbl: str) -> str:
 # ─────────────────────────────────────────────────────────────────────────
 # Block 1 — cluster x PC scores heatmap
 # ─────────────────────────────────────────────────────────────────────────
+def _as_labels(values) -> list[str]:
+    """Group labels as strings, with anything missing becoming "".
+
+    A real metadata column has gaps -- here 118 of 914 samples carry no sample
+    type -- and the label is used both as a palette key and inside ``sorted()``.
+    NaN is truthy and unorderable against str, so it has to be normalised once,
+    at the point the labels enter the figure code.  "" is the value the palettes
+    and the legends already treat as "no label" and colour grey.
+    """
+    out = []
+    for v in values:
+        if v is None or (isinstance(v, float) and np.isnan(v)):
+            out.append("")
+        else:
+            out.append(str(v))
+    return out
+
+
 def _draw_scores_heatmap(res, title, out_path, dpi):
     scores_df = res.scores
     var_expl = res.variance_explained
     n_obs, K = scores_df.shape
-    class_lut = class_colour_lut(sorted(set(res.labels)))
-    col_colors = [class_lut.get(res.labels.iloc[i], "#dddddd") for i in range(n_obs)]
+    labels = _as_labels(res.labels.values)
+    class_lut = class_colour_lut(sorted(set(labels)))
+    col_colors = [class_lut.get(l, "#dddddd") for l in labels]
 
     body_w = 0.35 * K + 1.5
     body_h = 0.32 * n_obs + 1.5
@@ -312,8 +331,22 @@ def _draw_pc_loadings(res, tag_title, out_dir, prefix, dpi, top_n=25):
         dendrogram_ratio=(0.12, 0.04), cbar_pos=(0.02, 0.82, 0.015, 0.12),
         cbar_kws={"label": "loading"},
     )
-    cg.ax_heatmap.tick_params(axis="x", labelsize=7, rotation=0)
+    # A column here is one PC wide, and "PC10 (1%)" is wider than that, so flat
+    # labels overprint each other from about six components on -- which is the
+    # default.  The union panel below already rotates for the same reason.
+    for tick in cg.ax_heatmap.get_xticklabels():
+        tick.set_rotation(35); tick.set_ha("right"); tick.set_va("top")
+        tick.set_fontsize(7)
     cg.ax_heatmap.tick_params(axis="y", labelsize=6, rotation=0)
+    cg.ax_heatmap.set_ylabel("")
+    # The colour bar sits in the margin left of the row dendrogram, so its
+    # labels have to read outward: on the default (right) side the minus signs
+    # are the first thing the heatmap covers, and a signed loading whose sign
+    # cannot be read off the scale is the one thing this panel must not do.
+    cg.ax_cbar.yaxis.set_ticks_position("left")
+    cg.ax_cbar.yaxis.set_label_position("left")
+    cg.ax_cbar.tick_params(labelsize=6)
+    cg.ax_cbar.set_ylabel("loading", fontsize=7)
     for c in cg.ax_heatmap.collections:
         c.set_rasterized(True)
     cg.ax_heatmap.set_title(f"{tag_title}\nTop {len(top_paths)} pathways x top {K} PCs "
@@ -416,8 +449,9 @@ def render_pca_figures(res: PCAResult, out_dir: str | Path, prefix: str,
 
     scores_df, loadings_df = res.scores, res.loadings
     var_expl, pc_names = res.variance_explained, res.pc_names
-    group_labels = list(res.labels.values)
-    sub_labels = list(res.sublabels.values) if len(res.sublabels) else group_labels
+    group_labels = _as_labels(res.labels.values)
+    sub_labels = (_as_labels(res.sublabels.values) if len(res.sublabels)
+                  else group_labels)
     point_labels = [_short_label(l) for l in scores_df.index]
     sizes = res.sizes if res.sizes is not None else np.ones(scores_df.shape[0])
 

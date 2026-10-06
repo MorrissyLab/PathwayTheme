@@ -21,7 +21,12 @@ from .pca import run_pca_scopes
 from .diff import run_diff
 from .categories import load_category_map, summarize_by_category
 from .viz import (render_pca_figures, write_pca_tables, render_sanity_heatmap,
-                  render_diff_figures, write_diff_table, write_category_table)
+                  render_diff_figures, write_diff_table, write_category_table,
+                  render_scree, render_pca_scatter,
+                  render_metadata_attribution, render_level_attribution,
+                  render_theme_heatmap)
+from .pca.metadata import (associate_metadata, associate_levels,
+                           attribution_matrix)
 
 
 @dataclass
@@ -73,6 +78,11 @@ def run(config: PipelineConfig, *, verbose: bool = True) -> PipelineResult:
         f"geneset={config.enrichment.geneset}) ...")
     sm = run_enrichment(fm, config.enrichment)
     log(f"      ScoreMatrix: {sm.shape[0]} terms x {sm.shape[1]} samples")
+    if sm.coverage is not None:
+        n_req = len(sm.coverage)
+        n_drop = int((sm.coverage["status"] != "scored").sum())
+        log(f"      gene sets: {n_req - n_drop} of {n_req} scored"
+            + (f", {n_drop} dropped for insufficient coverage" if n_drop else ""))
 
     # 3 — grouping
     log(f"[3/5] grouping (mode={config.grouping.mode}) ...")
@@ -105,13 +115,117 @@ def run(config: PipelineConfig, *, verbose: bool = True) -> PipelineResult:
         log("[5/5] writing figures + tables ...")
         for res in results:
             out_dir = out_root / res.scope
+            # created here, not by whichever writer happens to run first: with
+            # tables off and the exploratory panels skipped, the scree would be
+            # the first write into a directory nobody had made
+            out_dir.mkdir(parents=True, exist_ok=True)
             prefix = f"{config.enrichment.geneset}_{res.scope}"
             title = f"{config.enrichment.geneset} / {res.scope}"
             paths: list[Path] = []
             if config.viz.make_tables:
                 paths += write_pca_tables(res, out_dir, prefix, config.pca)
+                # per-sample component scores: needed to relate a component to
+                # anything outside the PCA, and not recoverable from the others
+                sp = out_dir / f"{prefix}_pca_scores.tsv"
+                res.scores.to_csv(sp, sep="\t")
+                paths.append(sp)
             if config.viz.make_figures:
-                paths += render_pca_figures(res, out_dir, prefix, title, config.viz)
+                cap = config.viz.exploratory_max_observations
+                n_obs = res.scores.shape[0]
+                if not config.viz.exploratory_panels:
+                    log(f"      {res.scope}: exploratory panels off")
+                elif cap and n_obs > cap:
+                    # skipping loudly: these panels label every observation, so
+                    # at this size they would be unreadable rather than slow
+                    log(f"      {res.scope}: {n_obs} observations exceeds "
+                        f"viz.exploratory_max_observations={cap} — the 11 "
+                        "per-observation panels are skipped, the diagnostics "
+                        "below are not")
+                else:
+                    paths += render_pca_figures(res, out_dir, prefix, title,
+                                                config.viz)
+            # the scree is a diagnostic, not one of the 11 exploratory panels,
+            # so it is emitted whenever figures are on -- it is cheap and it is
+            # what decides how many components anything downstream should use
+            if config.viz.make_figures:
+                paths.append(render_scree(
+                    res.variance_explained,
+                    out_dir / f"{prefix}_pca_scree.pdf",
+                    elbow=config.pca.elbow_components,
+                    title=f"{title} — variance per component",
+                    dpi=config.viz.dpi))
+                if config.grouping.target_col:
+                    # reindex, not set_axis: a scope holds a subset of samples,
+                    # and a display_col makes scores.index differ from the
+                    # sample ids.  Reindexing yields NaN on a mismatch, which the
+                    # plot skips, rather than silently pairing the wrong rows.
+                    md = sm.metadata.table.reindex(res.scores.index)
+                    paths.append(render_pca_scatter(
+                        res.scores, res.variance_explained,
+                        out_dir / f"{prefix}_pca_scatter_metadata.pdf",
+                        colour_by=md.get(config.grouping.target_col),
+                        marker_by=(md.get(config.grouping.secondary_col)
+                                   if config.grouping.secondary_col else None),
+                        group_means=True, dpi=config.viz.dpi,
+                        title=f"{title} — colour = {config.grouping.target_col}"))
+
+            # 4b — associate every component with every metadata variable
+            if config.metadata.enabled:
+                assoc = associate_metadata(
+                    res.scores,
+                    sm.metadata.table.reindex(res.scores.index),
+                    columns=config.metadata.columns or None,
+                    min_group_size=config.metadata.min_group_size,
+                    alpha=config.metadata.alpha)
+                if not assoc.empty:
+                    n_sig = int(assoc["significant"].sum())
+                    log(f"      {res.scope}: metadata association — "
+                        f"{len(assoc)} test(s), {n_sig} at FDR<{config.metadata.alpha}")
+                    if config.viz.make_tables:
+                        ap = out_dir / f"{prefix}_metadata_pc_association.tsv"
+                        assoc.to_csv(ap, sep="\t", index=False)
+                        paths.append(ap)
+                        mp = out_dir / f"{prefix}_metadata_pc_matrix.tsv"
+                        attribution_matrix(assoc).to_csv(mp, sep="\t")
+                        paths.append(mp)
+                    if config.viz.make_figures:
+                        paths.append(render_metadata_attribution(
+                            assoc,
+                            out_dir / f"{prefix}_metadata_pc_attribution.pdf",
+                            variance_explained=res.variance_explained,
+                            technical=config.metadata.technical,
+                            n_components=config.metadata.plot_components,
+                            title=f"{title} — variance attribution",
+                            dpi=config.viz.dpi))
+
+            # 4c — which component is the axis of one particular level?  The
+            # omnibus test above cannot say; this splits every categorical
+            # variable into level-versus-rest.
+            if config.metadata.enabled and config.metadata.per_level:
+                cols = (config.metadata.per_level_columns
+                        or config.metadata.columns or None)
+                lv = associate_levels(
+                    res.scores,
+                    sm.metadata.table.reindex(res.scores.index),
+                    columns=cols,
+                    min_group_size=config.metadata.min_group_size,
+                    alpha=config.metadata.alpha)
+                if not lv.empty:
+                    n_sig = int(lv["significant"].sum())
+                    log(f"      {res.scope}: level association — "
+                        f"{len(lv)} test(s), {n_sig} at FDR<{config.metadata.alpha}")
+                    if config.viz.make_tables:
+                        lp = out_dir / f"{prefix}_metadata_pc_levels.tsv"
+                        lv.to_csv(lp, sep="\t", index=False)
+                        paths.append(lp)
+                    if config.viz.make_figures:
+                        paths.append(render_level_attribution(
+                            lv,
+                            out_dir / f"{prefix}_metadata_pc_levels.pdf",
+                            variance_explained=res.variance_explained,
+                            n_components=config.metadata.plot_components,
+                            title=f"{title} — level vs rest",
+                            dpi=config.viz.dpi))
             written[res.scope] = paths
             log(f"      {res.scope}: {len(paths)} file(s)")
     else:
@@ -119,6 +233,13 @@ def run(config: PipelineConfig, *, verbose: bool = True) -> PipelineResult:
 
     analysis_root = Path(config.output_dir) / config.enrichment.geneset
     base_prefix = config.enrichment.geneset
+
+    # gene-set coverage: which requested sets were scored, and why not
+    if sm.coverage is not None and config.viz.make_tables:
+        analysis_root.mkdir(parents=True, exist_ok=True)
+        cov_path = analysis_root / f"{base_prefix}_geneset_coverage.tsv"
+        sm.coverage.to_csv(cov_path, sep="\t", index=False)
+        written.setdefault("_coverage", []).append(cov_path)
 
     # optional — full-matrix sanity heatmap (QC)
     if config.viz.sanity_heatmap and config.viz.make_figures:
@@ -161,6 +282,13 @@ def run(config: PipelineConfig, *, verbose: bool = True) -> PipelineResult:
                 significance_col=sig_col, alpha=config.categories.alpha)
             if config.viz.make_tables:
                 dpaths += write_category_table(category_summary, analysis_root, base_prefix)
+            if config.viz.make_figures:
+                dpaths.append(render_theme_heatmap(
+                    category_summary,
+                    analysis_root / f"{base_prefix}_theme_heatmap.pdf",
+                    top_n=config.categories.plot_top_themes,
+                    title=f"{base_prefix} — GO-slim themes",
+                    dpi=config.viz.dpi))
         written.setdefault("_diff", []).extend(dpaths)
 
     return PipelineResult(fm, sm, grouping, results, Path(config.output_dir),
