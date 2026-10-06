@@ -1,48 +1,39 @@
 # PathwayTheme
 
-Turn **any omic data** into a pathway-level summary:
+Pathway-level analysis of any per-feature matrix, unsupervised and supervised
+from one score matrix:
 
-**enrichment (ssGSEA / EnrichR / GoSlim) → grouping → PCA (+ differential) → figures + tables.**
+**enrichment → grouping → PCA → differential testing → figures and tables.**
 
-Available in **Python** (this page) and **R** ([r/README.md](r/README.md)). Both
-are native implementations of the same pipeline: same YAML configs, same stages,
-same output files, checked against each other numerically.
+Gene-level measurements become per-sample pathway scores once. The components
+of that space are reported with the pathways that define them and tested
+against every recorded sample variable, biological and technical alike. The
+supervised half tests which pathways differ between groups and condenses
+thousands of terms into tens of categories.
 
-📄 **How the PCA step works (the math): [docs/METHODS.md](docs/METHODS.md).**
-📄 **Differential pathway analysis + category roll-up: [docs/DIFFERENTIAL.md](docs/DIFFERENTIAL.md).**
-📄 **R package (install, API, parity report): [r/README.md](r/README.md).**
+Available in Python (this page) and R ([`r/`](r/README.md)) as two native
+implementations of the same pipeline: same YAML configs, same stages, same
+output files, verified against each other numerically.
 
-## What it does
+**Documentation** — the PCA mathematics: [docs/METHODS.md](docs/METHODS.md) ·
+differential testing and category roll-up:
+[docs/DIFFERENTIAL.md](docs/DIFFERENTIAL.md) · the R package:
+[r/README.md](r/README.md) · a worked case study:
+[manuscript/](manuscript/README.md).
 
-```
-   your data            pathway scores        groups            PCA            figures + tables
-   ┌──────────┐         ┌────────────┐        ┌────────┐        ┌──────┐       ┌──────────────┐
-   │ .h5ad    │  enrich │ per-sample │  group │ compare│   PCA  │ trends│  viz  │ 11 plots     │
-   │ or matrix│ ───────▶│ pathway    │ ──────▶│  by ...│ ──────▶│ across│ ─────▶│  3 tables    │
-   └──────────┘         │ enrichment │        └────────┘        └──────┘       └──────────────┘
-```
+## Stages
 
-1. **Load** a single-cell `.h5ad` (summarised per cluster) or a
-   `features × samples` table (genes, proteins, etc.).
-2. **Enrich** each sample against gene sets, using one of:
-   - **ssGSEA** — a continuous score per pathway per sample.
-   - **EnrichR** — over-representation of each sample's top genes.
-   - **GoSlim** — coarse GO-slim category scores.
-3. **Group** — choose what to compare / colour by:
-   - a **metadata column** (e.g. `treatment`, `cell type`, `classification`),
-   - **existing** cluster labels, or
-   - **automatic** clustering when you have no labels.
-   Optionally run **one PCA per sample** (or per any grouping).
-4. **PCA + figures** — see which pathways drive the variation, and which
-   pathways define each group, as ready-to-use PDFs and tables.
-   → full calculation walkthrough in [docs/METHODS.md](docs/METHODS.md).
-5. **Differential analysis** *(optional)* — test which pathways differ between
-   groups (Welch t / Mann-Whitney / limma-style moderated t), with FDR, volcano
-   and top-pathway figures. Optionally roll the results up into broad
-   categories. → [docs/DIFFERENTIAL.md](docs/DIFFERENTIAL.md).
+| Stage | What it does |
+|---|---|
+| **Load** | a `features × samples` table (genes, proteins, anything quantified), or single-cell `.h5ad` files summarised per cluster |
+| **Enrich** | ssGSEA (continuous score per pathway per sample), EnrichR (over-representation of each sample's top genes), or GO-slim category scores |
+| **Group** | compare by a metadata column, by existing cluster labels, or by automatic clustering; a scope column gives one independent PCA per sample |
+| **PCA** | the axes of variation, the pathways that define them, and a per-sample signature |
+| **Attribute** | test every component against every annotated variable, with an effect size and FDR, rather than by eye |
+| **Differential** | Welch *t*, Mann-Whitney or moderated *t* between groups, with FDR, and an optional roll-up into broad categories |
 
-Along the way you can **keep only the samples you care about** (e.g. one tumour
-type) and drop a **full pathway × sample sanity heatmap** for QC.
+Samples can be restricted at any point (one tumour type, say), and the whole
+score matrix can be written as a QC heatmap.
 
 ## Install
 
@@ -51,29 +42,24 @@ uv venv --python 3.12
 uv pip install -e ".[all]"
 ```
 
-(`[all]` adds single-cell `.h5ad` input, GoSlim, and nicer plot labels. Plain
-`uv pip install -e .` is enough for ssGSEA/EnrichR from a matrix.)
+`[all]` adds `.h5ad` input, GO-slim and improved plot labels. Plain
+`uv pip install -e .` covers ssGSEA and EnrichR from a matrix.
 
 ## Usage
 
-### Run the whole thing in one call
-
-From the command line with a config file:
+### One call
 
 ```bash
-uv run pathwaytheme init -o my_config.yaml     # create a template to edit
+uv run pathwaytheme init -o my_config.yaml     # a template to edit
 uv run pathwaytheme run my_config.yaml
 ```
-
-Or from Python:
 
 ```python
 import pathwaytheme as pt
 
 pt.run_pipeline("my_config.yaml")
 
-# ...or without a file:
-pt.run_pipeline(**{
+pt.run_pipeline(**{                            # or without a file
     "input.matrix_path": "expr.tsv",
     "input.metadata_path": "meta.tsv",
     "enrichment.backend": "ssgsea",
@@ -83,98 +69,121 @@ pt.run_pipeline(**{
 })
 ```
 
-See `examples/moh_sm.yaml` (single-cell → ssGSEA),
-`examples/matrix_enrichr.yaml` (matrix → EnrichR), and
-`examples/asps_gobp.yaml` (bulk matrix → GO:BP ssGSEA → PCA + differential +
-categories, ASPS-style) for full configs.
+Complete configurations: [`examples/asps_gobp.yaml`](examples/asps_gobp.yaml)
+(bulk matrix → GO:BP ssGSEA → PCA, differential and categories),
+[`examples/moh_sm.yaml`](examples/moh_sm.yaml) (single-cell → one PCA per
+sample), [`examples/matrix_enrichr.yaml`](examples/matrix_enrichr.yaml) (matrix
+→ EnrichR).
 
-### Or run it step by step
+### Stage by stage
 
-Each step is one function, and its output feeds the next:
+Each stage is one function whose output feeds the next:
 
 ```python
 import pathwaytheme as pt
 
 data    = pt.load_matrix("expr.tsv", metadata="meta.tsv")   # or pt.load_h5ad("h5ad_folder/")
-data    = pt.filter_samples(data, "tumor_type", ["ASPS"])   # optional: keep one group
+data    = pt.filter_samples(data, "tumor_type", ["ASPS"])   # optional
 scores  = pt.enrich(data, backend="ssgsea", gmt="go_bp.gmt", geneset="GO_BP")
 groups  = pt.group(scores, mode="target", target_col="treatment")
 results = pt.pca(scores, groups)
 pt.figures(results, "results", geneset="GO_BP")
 ```
 
-Test **which pathways differ between groups**, then roll the hits up into broad
-categories:
+Test which pathways differ between groups, then roll the hits up:
 
 ```python
 d = pt.diff(scores, groups, method="moderated_t")           # welch | mannwhitney | moderated_t
-d.significant(0.05)                                         # per-pathway effect, p, FDR
-summary = pt.summarize_categories(d, "gobp_categories.tsv", # broad-category roll-up,
-                                  significance_col="fdr")   # split: significant vs not
+d.significant(0.05)                                         # effect, p, FDR per pathway
+summary = pt.summarize_categories(d, "gobp_categories.tsv",
+                                  significance_col="fdr")   # significant vs not, per category
 
-pt.sanity_heatmap(scores, "qc.pdf", label_col="treatment")  # full-matrix QC heatmap
+pt.sanity_heatmap(scores, "qc.pdf", label_col="treatment")
 ```
 
-Change the method by changing one line — the rest stays the same:
+Switching backend or grouping mode is a one-line change:
 
 ```python
-scores = pt.enrich(data, backend="enrichr", gmt="go_bp.gmt", top_n=200)     # over-representation
-scores = pt.enrich(data, backend="goslim",  gmt="goslim.gmt")               # GO-slim categories
+scores = pt.enrich(data, backend="enrichr", gmt="go_bp.gmt", top_n=200)
+scores = pt.enrich(data, backend="goslim",  gmt="goslim.gmt")
 
-groups = pt.group(scores, mode="auto", n_clusters=4)                        # cluster automatically
+groups = pt.group(scores, mode="auto", n_clusters=4)                        # no labels needed
 groups = pt.group(scores, mode="target", target_col="cell_type",
                   scope_col="sample_id")                                    # one PCA per sample
 ```
 
-### Look at the numbers yourself
+### The numbers themselves
 
 ```python
 r = pt.pca(scores, groups)[0]
-r.scores               # samples positioned on each principal component
-r.loadings             # how much each pathway contributes to each component
-r.variance_explained   # how much variation each component captures
+r.scores               # each sample's position on each component
+r.loadings             # each pathway's weight in each component
+r.variance_explained   # the variance each component carries
 r.signatures           # the pathways that define each group
 ```
 
-## What you get
+### What each component is
 
-**PCA** — for each group (or sample), written to
-`results/<geneset>/sample_pca/<group>/`:
+Naming a component by its extreme pathways says what varies. It does not say
+whether that variation is biological or technical. Enable the `metadata` block
+and every component is tested against every annotated variable: Kruskal-Wallis
+with η² for categorical variables, Spearman with ρ² for continuous ones, and
+Benjamini-Hochberg correction across the whole grid.
 
-- **11 figures** — scores heatmap, PC1–PC2 biplots, a pairwise-PC grid,
-  per-group pathway signatures, per-component top pathways, and pathway
-  loading heatmaps.
-- **3 tables** — variance explained, top pathways per component, and the
-  per-group pathway signatures.
+```yaml
+metadata:
+  enabled: true
+  columns: ["diagnosis", "sample_type", "library_type", "rin"]
+  technical: ["library_type", "rin"]    # labelling only, so the two are separable by eye
+  per_level: true                       # also test each level against the rest
+```
 
-**Differential analysis** *(when enabled)* — written to `results/<geneset>/`:
+An omnibus test says a component separates the levels of a variable, not which
+level. `per_level` adds the one-versus-rest breakdown (Mann-Whitney with a
+signed rank-biserial effect), which is what identifies a component as the axis
+of one particular subtype.
 
-- one **table** of every pathway per comparison (effect, p-value, FDR, direction),
-- a **volcano** and a **top-pathway bar** figure per comparison,
-- a **category-summary table** if you supply a term → category mapping.
+## Outputs
 
-**QC** *(when enabled)* — a full pathway × sample **sanity heatmap**
-(`results/<geneset>/<geneset>_sanity_heatmap.pdf`).
+Per PCA scope, under `results/<geneset>/sample_pca/<scope>/`:
+
+- **figures** — scree, score heatmap, biplots, pairwise-component grid,
+  per-group signatures, top pathways per component, loading heatmaps;
+- **tables** — variance explained, top pathways per component, per-group
+  signatures, component scores;
+- **component attribution** *(with `metadata` enabled)* —
+  `*_metadata_pc_association.tsv`, its matrix form, the per-level breakdown,
+  and the attribution figures.
+
+Per gene-set collection, under `results/<geneset>/`:
+
+- **differential** *(when enabled)* — one table of every pathway per comparison
+  (effect, p-value, FDR, direction), a volcano and a top-pathway figure per
+  comparison, and a category summary when a term → category map is supplied;
+- **coverage** — which requested gene sets were scored, and why the rest were
+  not;
+- **QC** *(when enabled)* — the pathway × sample sanity heatmap.
 
 ## Common options
 
 | Where | Option | Meaning |
 |---|---|---|
-| `filter_samples` | `column`, `keep` | keep only samples whose metadata matches (e.g. one tumour type) |
+| `filter_samples` | `column`, `keep` | keep only samples whose metadata matches |
 | `enrich` | `backend` | `ssgsea` · `enrichr` · `goslim` |
 | `enrich` | `gmt` | path to a gene-set `.gmt` file |
-| `enrich` | `top_n` / `threshold` | how EnrichR/GoSlim pick each sample's genes |
+| `enrich` | `top_n` / `threshold` | how EnrichR and GO-slim pick each sample's genes |
 | `group` | `mode` | `target` · `existing` · `auto` |
-| `group` | `target_col` | metadata column to compare/colour by |
+| `group` | `target_col` | metadata column to compare and colour by |
 | `group` | `scope_col` | run a separate PCA within each value of this column |
-| `pca` | `size_col` | metadata column that sets dot sizes (e.g. cell counts) |
-| `diff` | `method` | `welch` · `mannwhitney` · `moderated_t` (limma-style) |
+| `pca` | `size_col` | metadata column setting dot sizes (e.g. cell counts) |
+| `metadata` | `columns`, `technical`, `per_level` | variables to test, how to label them, and the one-versus-rest breakdown |
+| `diff` | `method` | `welch` · `mannwhitney` · `moderated_t` |
 | `diff` | `reference` / `contrasts` | reference group, or explicit `[[case, ref], …]` (default: one-vs-rest) |
-| `summarize_categories` | `mapping` | term → category map (dict/Series or `.tsv`) |
-| `summarize_categories` | `significance_col` | split each category into significant vs non-significant (e.g. `fdr`, `alpha=0.05`) |
-| `sanity_heatmap` | `label_col` | metadata label for the QC heatmap colour strip |
+| `summarize_categories` | `mapping` | term → category map (dict, Series or `.tsv`) |
+| `summarize_categories` | `significance_col` | split each category into significant and non-significant (e.g. `fdr`, `alpha=0.05`) |
+| `sanity_heatmap` | `label_col` | metadata column for the heatmap colour strip |
 
-## Same pipeline in R
+## The same pipeline in R
 
 ```r
 remotes::install_local("r")
@@ -182,14 +191,20 @@ library(pathwaytheme)
 
 pt_run_pipeline("my_config.yaml")          # the same YAML this page uses
 
-scores  <- pt_enrich(pt_load_matrix("expr.tsv", metadata = "meta.tsv"),
-                     backend = "ssgsea", gmt = "go_bp.gmt", geneset = "GO_BP")
-groups  <- pt_group(scores, mode = "target", target_col = "treatment")
+scores <- pt_enrich(pt_load_matrix("expr.tsv", metadata = "meta.tsv"),
+                    backend = "ssgsea", gmt = "go_bp.gmt", geneset = "GO_BP")
+groups <- pt_group(scores, mode = "target", target_col = "treatment")
 pt_figures(pt_pca(scores, groups), "results", geneset = "GO_BP")
 ```
 
-The R package is native — it does not call Python — and every stage is verified
-against this implementation on shared inputs (38 checks, agreement to ~1e-13).
-Details, the full name mapping and the known differences are in
+The R package is native rather than a wrapper around Python, and every stage is
+verified against this implementation on shared inputs (38 checks, agreement to
+~1e-13). The name mapping and the known differences are in
 [r/README.md](r/README.md); reproduce the comparison with
 `python r/parity/run_python.py && Rscript r/parity/compare.R`.
+
+## Case study
+
+[`manuscript/`](manuscript/README.md) reproduces a published application of the
+package end to end: 901 transcriptomes, ten pipeline runs, and every figure,
+table and quoted number, as six notebooks run in order from public input data.
