@@ -21,19 +21,24 @@ differential testing and category roll-up:
 [r/README.md](r/README.md) · a worked case study:
 [manuscript/](manuscript/README.md).
 
-## Stages
+## How it works
 
-| Stage | What it does |
-|---|---|
-| **Load** | a `features × samples` table (genes, proteins, anything quantified), or single-cell `.h5ad` files summarised per cluster |
-| **Enrich** | ssGSEA (continuous score per pathway per sample), EnrichR (over-representation of each sample's top genes), or GO-slim category scores |
-| **Group** | compare by a metadata column, by existing cluster labels, or by automatic clustering; a scope column gives one independent PCA per sample |
-| **PCA** | the axes of variation, the pathways that define them, and a per-sample signature |
-| **Attribute** | test every component against every annotated variable, with an effect size and FDR, rather than by eye |
-| **Differential** | Welch *t*, Mann-Whitney or moderated *t* between groups, with FDR, and an optional roll-up into broad categories |
+![A gene by sample matrix is scored once into a pathway by sample matrix, which feeds an unsupervised branch (PCA of pathway space, component annotation, metadata association) and a supervised branch (differential analysis, theme summarisation).](docs/assets/workflow.png)
 
-Samples can be restricted at any point (one tumour type, say), and the whole
-score matrix can be written as a QC heatmap.
+One enrichment pass produces the score matrix both halves read. The
+unsupervised branch asks what each group is, the supervised branch asks what
+separates them.
+
+**Input** is a `features × samples` table (genes, proteins, anything
+quantified) or single-cell `.h5ad` files summarised per cluster. **Grouping**
+is by a metadata column, by existing cluster labels, or by automatic
+clustering, and a scope column gives one independent PCA per sample. Samples
+can be restricted at any point, and the whole score matrix can be written as a
+QC heatmap.
+
+The schematic is drawn by the package rather than by hand, so a paper's figure
+and this page cannot drift apart:
+`python -c "from pathwaytheme.viz import render_workflow; render_workflow('docs/assets/workflow.png', dpi=200)"`.
 
 ## Install
 
